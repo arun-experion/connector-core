@@ -1,0 +1,34 @@
+{
+  "$defs": [],
+  "$id": "https://formassembly.com/fake/schema.json",
+  "$schema": "https://formassembly.com/connector/1.0/schema-integration",
+  "items": {
+    "persons": {
+      "additionalProperties": false,
+      "properties": {
+        "created": {
+          "format": "date-time",
+          "title": "created",
+          "type": "string"
+        },
+        "email": {
+          "format": "comma-separated",
+          "title": "email",
+          "type": "string"
+        },
+        "id": {
+          "title": "id",
+          "type": "number"
+        },
+        "name": {
+          "format": "comma-separated",
+          "title": "name",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "Fake Schema - For testing only",
+  "type": "array"
+}

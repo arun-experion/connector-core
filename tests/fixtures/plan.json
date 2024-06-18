@@ -1,0 +1,65 @@
+{
+  "source": "fake",
+  "target": "fake",
+  "operations": [
+    {
+      "id": 0,
+      "in": [],
+      "out": [
+        1
+      ]
+    },
+    {
+      "id": 1,
+      "in": [
+        0
+      ],
+      "out": [],
+      "recordLocators": {
+        "source":
+          {
+            "recordType": "step_1"
+          }
+        ,
+        "target":
+          {
+            "recordType": "abc"
+          }
+      },
+      "mapping": [
+        {
+          "source": {
+            "id": "tfa_1",
+            "label": "Student Name"
+          },
+          "target": {
+            "id": "column",
+            "label": "Auto"
+          }
+        },
+        {
+          "source": {
+            "id": "tfa_6",
+            "label": "Course Grade"
+          },
+          "target": {
+            "id": "column",
+            "label": "Auto"
+          }
+        }
+      ],
+      "resultMapping": [
+        {
+          "source": {
+            "id": "rank",
+            "label": "Student Rank"
+          },
+          "target": {
+            "id": "tfa_7",
+            "label": "Student Rank"
+          }
+        }
+      ]
+    }
+  ]
+}

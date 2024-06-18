@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formassembly.com/connectors/v1.0/execution-plan.schema.json",
+  "title": "Connector Execution Plan Schema",
+  "description": "The execution plan of a FormAssembly connector",
+  "type": "object",
+  "properties": {
+    "source": {
+      "description": "The identifier of the source integration (extracting data from)",
+      "type": "string"
+    },
+    "target": {
+      "description": "The identifier of the target integration (loading data into)",
+      "type": "string"
+    },
+    "operations": {
+      "description": "The list of operations to be executed by the connector, as a directed acyclic graph.",
+      "type": "array",
+      "items": {
+        "title": "Operation",
+        "description": "A single operation to be executed by the connector.",
+        "type": "object",
+        "required": [
+          "id",
+          "in",
+          "out"
+        ],
+        "properties": {
+          "id": {
+            "description": "The operation's unique identifier ",
+            "type": "integer",
+            "minimum": 0
+          },
+          "in": {
+            "description": "The IDs of operations linked by an incoming edge.",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "out": {
+            "description": "The IDs of operations linked by an outgoing edge.",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "recordLocators": {
+            "description": "Data structure that uniquely identify records/resources to be operated on.",
+            "type": "object",
+            "required": [
+              "source",
+              "target"
+            ],
+            "properties": {
+              "source": {
+                "description": "Data structure that uniquely identify the records/resources to extract data from",
+                "$ref": "#/$defs/recordLocator"
+              },
+              "target": {
+                "description": "Data structure that uniquely identify the records/resources to load data into",
+                "$ref": "#/$defs/recordLocator"
+              }
+            }
+          },
+          "mapping": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/mappingItem"
+            }
+          },
+          "resultMapping": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/mappingItem"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "recordLocator": {
+      "description": "Data structure that uniquely identify records/resources to operated on. Implementation-specific.",
+      "type": "object",
+      "properties": {
+        "recordType": {
+          "description": "Applicable when the resource can be identified with a unique identifier",
+          "type": "string"
+        }
+      }
+    },
+    "mappingItem": {
+      "description": "Data structure providing a mapping between a property of the source record and a property of the target record",
+      "type": "object",
+      "required": [
+        "source",
+        "target"
+      ],
+      "properties": {
+        "source": {
+          "description": "Data structure identifying a property in the source record",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Unique identifier of a property in the source record",
+              "type": "string"
+            },
+            "label": {
+              "description": "Human-readable name for the property. Should match the title attribute in the integration's schema.",
+              "type": "string"
+            }
+          }
+        },
+        "target": {
+          "description": "Data structure identifying a property in the target record",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Unique identifier of a property in the target record",
+              "type": "string"
+            },
+            "label": {
+              "description": "Human-readable name for the property. Should match the title attribute in the integration's schema.",
+              "type": "string"
+            }
+          }
+        },
+        "transform": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    }
+  }
+}

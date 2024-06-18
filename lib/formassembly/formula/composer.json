@@ -1,0 +1,20 @@
+{
+    "name": "formassembly/formula",
+    "description": "Formula Engine",
+    "version": "1.0.0-dev",
+    "type": "library",
+    "license": "proprietary",
+    "autoload": {
+        "psr-4": {
+            "FormAssembly\\Formula\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "FormAssembly,inc."
+        }
+    ],
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.29"
+    }
+}
