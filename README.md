@@ -4,7 +4,6 @@
 
 
 
-
 This is the connector runtime library, available as a PHP Composer package. 
 
 See: [Connector Design](https://formassembly.atlassian.net/wiki/spaces/ENG/pages/2658074625/Connector+Design) in Confluence.
