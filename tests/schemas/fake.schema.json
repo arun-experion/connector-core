@@ -18,7 +18,7 @@
         },
         "id": {
           "title": "id",
-          "type": "number"
+          "type": "integer"
         },
         "name": {
           "format": "comma-separated",

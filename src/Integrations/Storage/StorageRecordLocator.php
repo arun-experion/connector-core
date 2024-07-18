@@ -22,6 +22,27 @@ class StorageRecordLocator extends RecordLocator
 
     public function getPath(): string
     {
-        return $this->recordType . ($this->folder?'/'.ltrim($this->folder,"/"):"");
+        return $this->recordType . ($this->folder?'/'.$this->escapeFolderName(ltrim($this->folder,"/")):"");
+    }
+
+    private function escapeFolderName(string $folderName): string {
+        $escapeMapping = [
+            '/'  => '%2F',
+            '\\' => '%5C',
+            '?'  => '%3F',
+            '*'  => '%2A',
+            ':'  => '%3A',
+            '|'  => '%7C',
+            '"'  => '%22',
+            '<'  => '%3C',
+            '>'  => '%3E',
+            '#'  => '%23'
+        ];
+
+        foreach ($escapeMapping as $char => $escape) {
+            $folderName = str_replace($char, $escape, $folderName);
+        }
+
+        return $folderName;
     }
 }

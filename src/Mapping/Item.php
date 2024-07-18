@@ -11,11 +11,13 @@ class Item
     public string $key;
     public mixed $value;
     public ?string $label;
+    public ?string $type;
 
-    public function __construct(string $key, mixed $value = null, string $label = null)
+    public function __construct(string $key, mixed $value = null, string $label = null, string $type = null)
     {
         $this->key   = $key;
         $this->value = $value;
         $this->label = $label;
+        $this->type  = $type;
     }
 }

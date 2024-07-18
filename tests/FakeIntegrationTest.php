@@ -68,6 +68,8 @@ final class FakeIntegrationTest extends TestCase
         $this->assertCount(2, $response->recordset->records);
         $this->assertEquals(["name" =>"John", "email" =>"john@example.org", 'id' => 1], $response->recordset->records[0]->data);
         $this->assertEquals(["name" =>"Jane", "email" =>"jane@example.org", "id" => 2], $response->recordset->records[1]->data);
+
+        $this->assertEquals(['Selected 2 persons record(s)'], $integration->getLog());
     }
 
     public function testScopedExtract(): void
@@ -90,9 +92,12 @@ final class FakeIntegrationTest extends TestCase
         $this->assertCount(2, $response->recordset->records);
         $this->assertEquals(["id" => 1, "status" => "pending", "created" => "2023-12-12 12:12:12"], $response->recordset->records[0]->data);
         $this->assertEquals(["id" => 2, "status" => "closed",  "created" => "2023-12-11 11:11:11"], $response->recordset->records[1]->data);
+        $this->assertEquals(['Selected 2 applications record(s)'], $integration->getLog());
 
         $response      = $integration->extract($recordLocator, $mapping, new RecordKey(2,"persons"));
         $this->assertCount(1, $response->recordset->records);
         $this->assertEquals(["id" => 3, "status" => "closed", "created" => "2023-12-10 10:10:10"], $response->recordset->records[0]->data);
+
+        $this->assertEquals(['Selected 1 applications record(s)'], $integration->getLog());
     }
 }

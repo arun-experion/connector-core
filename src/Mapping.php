@@ -56,6 +56,23 @@ class Mapping implements Iterator, ArrayAccess, Countable
     }
 
     /**
+     *
+     * @param string $type
+     *
+     * @return array
+     */
+    public function getItemsByType(string $type): array
+    {
+        $items = [];
+        foreach($this->items as $item) {
+            if($item->type === $type) {
+                $items[] = $item;
+            }
+        }
+        return $items;
+    }
+
+    /**
      * @param string $key
      *
      * @return array

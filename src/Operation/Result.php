@@ -2,14 +2,19 @@
 
 namespace Connector\Operation;
 
+use Connector\Record;
 use Connector\Record\RecordKey;
 use Connector\Record\Recordset;
 
+/**
+ * The Result of an Operation. Contains information about the data extracted and loaded.
+ */
 final class Result
 {
-    private Recordset $extractedRecordSet;
+    private Recordset  $extractedRecordSet;
     private RecordKey $loadedRecordKey;
     private Recordset $returnedRecordSet;
+    private array $log = [];
 
     public function __construct()
     {
@@ -19,6 +24,7 @@ final class Result
     }
 
     /**
+     * Get the collection of Records extracted from the source
      * @return \Connector\Record\Recordset
      */
     public function getExtractedRecordSet(): Recordset
@@ -27,6 +33,7 @@ final class Result
     }
 
     /**
+     * Set the collection of Records extracted from the source
      * @param \Connector\Record\Recordset $extractedRecordSet
      *
      * @return \Connector\Operation\Result
@@ -38,6 +45,7 @@ final class Result
     }
 
     /**
+     * Get the key (implementation-specific unique record ID) of the record that was loaded in the target
      * @return \Connector\Record\RecordKey
      */
     public function getLoadedRecordKey(): RecordKey
@@ -46,6 +54,7 @@ final class Result
     }
 
     /**
+     * Set the key (implementation-specific unique record ID) of the record that was loaded in the target
      * @param \Connector\Record\RecordKey $loadedRecordKey
      *
      * @return \Connector\Operation\Result
@@ -85,8 +94,40 @@ final class Result
         return count($this->returnedRecordSet) > 0;
     }
 
+    /**
+     * Returns the record key (implementation-specific unique ID) of the first record extracted from the source (if any).
+     * Note that multiple records may be extracted. This returns only the first record key.
+     * @return \Connector\Record\RecordKey|null
+     */
     public function getExtractedRecordKey(): ?RecordKey
     {
         return $this->extractedRecordSet[0]?->getKey();
+    }
+
+    /**
+     * Returns the log produced by the operation (includes log produced by source and target integrations)
+     * @return array
+     */
+    public function getLog(): array
+    {
+        return $this->log;
+    }
+
+    /**
+     * Add a message or array of messages to the Operation log
+     * @param string|string[] $messages
+     *
+     * @return void
+     */
+    public function log(mixed $messages): void
+    {
+        if(!empty($messages)) {
+            if(is_array($messages)) {
+                $this->log = array_merge($this->log, $messages);
+            }
+            else {
+                $this->log[] = $messages;
+            }
+        }
     }
 }

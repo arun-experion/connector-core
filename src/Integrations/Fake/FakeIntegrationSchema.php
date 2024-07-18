@@ -66,8 +66,10 @@ class FakeIntegrationSchema extends IntegrationSchema
     private function sqlTypeToJsonSchemaType($type): array
     {
         return match (strtolower($type)) {
-            "integer"   => ["type" => JsonSchemaTypes::Number],
+            "integer"   => ["type" => JsonSchemaTypes::Integer],
+            "real"      => ["type" => JsonSchemaTypes::Number],
             "date"      => ["type" => JsonSchemaTypes::String, "format" => JsonSchemaFormats::Date],
+            "time"      => ["type" => JsonSchemaTypes::String, "format" => JsonSchemaFormats::Time],
             "datetime"  => ["type" => JsonSchemaTypes::String, "format" => JsonSchemaFormats::DateTime],
             default     => ["type" => JsonSchemaTypes::String, "format" => JsonSchemaFormats::CommaSeparated],
         };

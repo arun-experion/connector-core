@@ -67,6 +67,11 @@ Interface IntegrationInterface
      * @param \Connector\Record\RecordKey|null  $scope
      *
      * @return \Connector\Integrations\Response
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     * @throws \Connector\Exceptions\InvalidSchemaException
+     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\SkippedOperationException
+     * @throws \Connector\Exceptions\AbortedOperationException
      */
     public function extract(RecordLocator $recordLocator, Mapping $mapping, ?RecordKey $scope): Response;
 
@@ -80,6 +85,10 @@ Interface IntegrationInterface
      *
      * @return \Connector\Integrations\Response
      * @throws \Connector\Exceptions\EmptyRecordException
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     * @throws \Connector\Exceptions\InvalidSchemaException
+     * @throws \Connector\Exceptions\SkippedOperationException
+     * @throws \Connector\Exceptions\AbortedOperationException
      */
     public function load(RecordLocator $recordLocator, Mapping $mapping, ?RecordKey $scope): Response;
 }

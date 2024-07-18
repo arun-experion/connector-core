@@ -3,7 +3,11 @@ declare(strict_types=1);
 
 namespace Connector;
 
+use Connector\Exceptions\AbortedExecutionException;
+use Connector\Exceptions\AbortedOperationException;
 use Connector\Exceptions\EmptyRecordException;
+use Connector\Exceptions\RecordNotFound;
+use Connector\Exceptions\SkippedOperationException;
 use Connector\Integrations\AbstractIntegration;
 use Connector\Record\RecordKey;
 use Connector\Record\Recordset;
@@ -23,6 +27,8 @@ final Class Execution extends Graph
      */
     private array $sourceRecords = [];
 
+    protected array $log = [];
+
     public function __construct(string $executionPlan, AbstractIntegration $sourceIntegration, AbstractIntegration $targetIntegration) {
         parent::__construct($executionPlan);
         $this->sourceIntegration = $sourceIntegration;
@@ -30,9 +36,15 @@ final Class Execution extends Graph
     }
 
     /**
+     * Run the connector. Executes operations defined in the execution plan.
+     *
+     * @param \Connector\Record\RecordKey|null $sourceScope
+     *
+     * @return void
+     * @throws \Connector\Exceptions\AbortedExecutionException
      * @throws \Connector\Exceptions\InvalidExecutionPlan
      * @throws \Connector\Exceptions\InvalidMappingException
-     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\InvalidSchemaException
      */
     public function run(RecordKey $sourceScope = null): void
     {
@@ -50,7 +62,8 @@ final Class Execution extends Graph
      *
      * @throws \Connector\Exceptions\InvalidExecutionPlan
      * @throws \Connector\Exceptions\InvalidMappingException
-     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\InvalidSchemaException
+     * @throws \Connector\Exceptions\AbortedExecutionException
      */
     private function runTransaction(int $currentId = 0, RecordKey $sourceScope = null, RecordKey $targetScope = null): void
     {
@@ -62,14 +75,33 @@ final Class Execution extends Graph
 
                 try {
                     $result = $op->run($sourceScope, $targetScope, $this->getSourceRecord($currentId));
-                } catch(EmptyRecordException $exception) {
-                    // The integration found no data to work with. The operation and its descendents are skipped.
-                    // TODO: Consider logging
+                }
+                catch(SkippedOperationException $exception) {
+                    // Operation was skipped due to user-configured skip condition. The operation and its descendents are skipped.
+                    $this->log($currentId, $exception->getMessage());
+                    return;
+                }
+                catch(AbortedOperationException $exception) {
+                    // Operation was aborted due to system error or user-configured abort condition. Transaction must terminate.
+                    $this->log($currentId, $exception->getMessage());
+                    throw new AbortedExecutionException($exception->getMessage());
+                }
+                catch(RecordNotFound $exception) {
+                    // The source integration had no data to extract. The operation and its descendents are skipped.
+                    $this->log($currentId, $exception->getMessage());
+                    return;
+                }
+                catch(EmptyRecordException $exception) {
+                    // The target integration had no data to load after extract/transform. The operation and its descendents are skipped.
+                    $this->log($currentId, $exception->getMessage());
                     return;
                 }
                 finally {
+                    // Keep a record of logged activities for this operation.
+                    $this->log($currentId, $op->getLog());
                     $this->markAsVisited($currentId);
                 }
+
 
                 $sourceScope = $result->getExtractedRecordKey();
                 $targetScope = $result->getLoadedRecordKey();
@@ -84,7 +116,7 @@ final Class Execution extends Graph
     }
 
     /**
-     * @param \Connector\Operation\Result  $result
+     * @param \Connector\Operation\Result $result
      * @param int                         $currentOperationId
      * @param \Connector\Record\RecordKey $sourceScope
      * @param \Connector\Record\RecordKey $targetScope
@@ -92,7 +124,7 @@ final Class Execution extends Graph
      * @return void
      * @throws \Connector\Exceptions\InvalidExecutionPlan
      * @throws \Connector\Exceptions\InvalidMappingException
-     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\InvalidSchemaException
      */
     private function processResult(Result $result, int $currentOperationId, RecordKey $sourceScope, RecordKey $targetScope): void
     {
@@ -104,21 +136,32 @@ final Class Execution extends Graph
         // we process each record through a new "reversed" Operation (where the flow of data is reversed)
         $config =& $this->getNodeById($currentOperationId);
 
-        if(isset($config['resultMapping']) && $result->hasReturnedRecords()) {
+        if(isset($config['resultMapping']) && count($config['resultMapping']) > 0 && $result->hasReturnedRecords()) {
 
             $reverseOperationCfg =& $this->addNodeAfter($currentOperationId);
             $reverseOperationCfg["recordLocators"] = [
                 'source' => $config['recordLocators']['target'],
                 'target' => $config['recordLocators']['source']
             ];
+            $reverseOperationCfg["recordLocators"]['target']['recordKey'] = $sourceScope;
             $reverseOperationCfg["mapping"] = $config['resultMapping'];
 
             $reverseOperation = new Operation($reverseOperationCfg, $this->targetIntegration, $this->sourceIntegration);
 
             foreach($result->getReturnedRecordSet()->records as $record) {
                 $this->setSourceRecord($reverseOperationCfg['id'], $record);
-                $reverseOperation->run($targetScope, $sourceScope, $record);
-                $this->markAsVisited($reverseOperationCfg['id']);
+                try {
+                    $result = $reverseOperation->run($targetScope, $sourceScope, $record);
+                } catch (RecordNotFound | AbortedOperationException | SkippedOperationException | EmptyRecordException $exception) {
+                    // Not applicable, as the extracted record is provided.
+                    $this->log($reverseOperationCfg['id'], $exception->getMessage());
+
+                    return;
+                } finally {
+                    // Keep a record of logged activities for this operation.
+                    $this->log($reverseOperationCfg['id'], $reverseOperation->getLog());
+                    $this->markAsVisited($reverseOperationCfg['id']);
+                }
             }
         }
     }
@@ -142,7 +185,7 @@ final Class Execution extends Graph
     /**
      * Stores the Record extracted by a given Operation.
      *
-     * @param int                      $operationId
+     * @param int               $operationId
      * @param \Connector\Record $record
      *
      * @return void
@@ -152,15 +195,54 @@ final Class Execution extends Graph
         $this->sourceRecords[$operationId] = $record;
     }
 
+    /**
+     * Gets the Record extracted by a given Operation.
+     * @param int $operationId
+     *
+     * @return \Connector\Record|null
+     */
     private function getSourceRecord(int $operationId): ?Record
     {
         return $this->sourceRecords[$operationId] ?? null;
     }
 
+    /**
+     * Not used. To be removed.
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     */
     private function setTargetRecordIndex(int $operationId, int $index): void
     {
         $node =& $this->getNodeById($operationId);
         $node['recordLocators']['target']["index"] = $index;
     }
 
+    /**
+     * Add log message(s) for the given $operationId.
+     * @param int   $operationId
+     * @param string|string[] $messages
+     *
+     * @return void
+     */
+    private function log(int $operationId, mixed $messages): void
+    {
+        if(!empty($messages)) {
+            if(is_string($messages)) {
+                $messages = [$messages];
+            }
+            if(isset($this->log[$operationId])) {
+                $this->log[$operationId] = array_merge($this->log[$operationId], $messages);
+            } else {
+                $this->log[$operationId] = $messages;
+            }
+        }
+    }
+
+    /**
+     * Return log messages indexed by operation ID. I.e [1 => [...], 2 => [...]]
+     * @return array
+     */
+    public function getLog(): array
+    {
+        return $this->log;
+    }
 }

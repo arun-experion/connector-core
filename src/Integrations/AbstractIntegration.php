@@ -38,14 +38,24 @@ abstract class AbstractIntegration implements IntegrationInterface
         return $this;
     }
 
-    protected function log(string $message): void
+    protected function log(mixed $message): void
     {
-        $this->log[] = $message;
+        if(is_array($message)) {
+            $this->log = array_merge($this->log,$message);
+        } else {
+            $this->log[] = $message;
+        }
     }
 
+    /**
+     * Retrieve and *purge* integration log. Next call to getLog() will only return newly created log entries.
+     * @return array|string[]
+     */
     public function getLog(): array
     {
-        return $this->log;
+        $log = $this->log;
+        $this->log = [];
+        return $log;
     }
 
     /**
@@ -96,6 +106,11 @@ abstract class AbstractIntegration implements IntegrationInterface
      * @param \Connector\Record\RecordKey|null $scope
      *
      * @return \Connector\Integrations\Response
+     * @throws \Connector\Exceptions\InvalidSchemaException
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\SkippedOperationException
+     * @throws \Connector\Exceptions\AbortedOperationException
      */
     public abstract function extract(RecordLocator $recordLocator, Mapping $mapping, ?RecordKey $scope): Response;
 
@@ -109,6 +124,10 @@ abstract class AbstractIntegration implements IntegrationInterface
      *
      * @return \Connector\Integrations\Response
      * @throws \Connector\Exceptions\EmptyRecordException
+     * @throws \Connector\Exceptions\InvalidSchemaException
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     * @throws \Connector\Exceptions\SkippedOperationException
+     * @throws \Connector\Exceptions\AbortedOperationException
      */
     public abstract function load(RecordLocator $recordLocator, Mapping $mapping, ?RecordKey $scope): Response;
 }

@@ -1,7 +1,9 @@
 <?php
 
+use Connector\Exceptions\EmptyRecordException;
 use Connector\Exceptions\InvalidExecutionPlan;
 use Connector\Exceptions\RecordNotFound;
+use Connector\Exceptions\SkippedOperationException;
 use Connector\Integrations\AbstractIntegration;
 use Connector\Integrations\Fake;
 use Connector\Integrations\Response;
@@ -15,6 +17,7 @@ use Connector\Schema\GenericSchema;
 use Connector\Schema\IntegrationSchema;
 use Connector\Type\DataType;
 use Connector\Type\JsonSchemaTypes;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -40,6 +43,9 @@ use PHPUnit\Framework\TestCase;
  * @covers Connector\Record
  * @covers Connector\Record\RecordKey
  * @covers Connector\Record\RecordLocator
+ * @covers Connector\Operation\Formula
+ * @covers Connector\Operation\Precondition
+ * @covers Connector\Integrations\Database\GenericWhereClause
  */
 class OperationTest extends TestCase
 {
@@ -47,7 +53,7 @@ class OperationTest extends TestCase
     /**
      * @param \Connector\Schema\IntegrationSchema|null $schema
      */
-    private function getMockIntegration(IntegrationSchema $schema = null)
+    private function getMockIntegration(IntegrationSchema $schema = null): MockObject
     {
         $schema = $schema ?? new GenericSchema();
         $mock = $this->getMockBuilder(AbstractIntegration::class)->getMock();
@@ -64,7 +70,9 @@ class OperationTest extends TestCase
             "name text",
             "course string",
             "grade text",
-            "date text",
+            "date date",
+            "time time",
+            "datetime datetime",
             "credits text",
             "semester text" ]);
         $source->discover();
@@ -85,6 +93,12 @@ class OperationTest extends TestCase
         return $target;
     }
 
+    /**
+     * @throws \Connector\Exceptions\InvalidMappingException
+     * @throws \Connector\Exceptions\RecordNotFound
+     * @throws \Connector\Exceptions\InvalidExecutionPlan
+     * @throws \Connector\Exceptions\EmptyRecordException
+     */
     public function testRun()
     {
         $source = $this->getFakeSourceIntegration();
@@ -231,7 +245,12 @@ class OperationTest extends TestCase
                           $loadedRecord);
 
         // Check operation log
-        $this->assertEquals(["Field 'course' not found in record"], $operation->getLog());
+        $this->assertEquals([
+            "Selected 1 transcript record(s)",
+            "Field 'course' not found in record",
+            "Inserted data record, ID: 1",
+                            ],
+        $operation->getLog());
     }
 
     public function testIncompleteTargetMapping()
@@ -266,7 +285,12 @@ class OperationTest extends TestCase
                           $loadedRecord);
 
         // Check operation log
-        $this->assertEquals(["Incomplete mapping configuration. Target is not set."], $operation->getLog());
+        $this->assertEquals([
+                                'Selected 1 transcript record(s)',
+                                "Incomplete mapping configuration. Target is not set.",
+                                'Inserted data record, ID: 1',
+                            ],
+                            $operation->getLog());
     }
 
     public function testIncompleteSourceMapping()
@@ -301,7 +325,11 @@ class OperationTest extends TestCase
                           $loadedRecord);
 
         // Check operation log
-        $this->assertEquals(["Incomplete mapping configuration. Source is not set."], $operation->getLog());
+        $this->assertEquals([   "Selected 1 transcript record(s)",
+                                "Incomplete mapping configuration. Source is not set.",
+                                "Inserted data record, ID: 1"
+                            ],
+                            $operation->getLog());
     }
 
     public function testNoRecordExtracted()
@@ -708,13 +736,14 @@ class OperationTest extends TestCase
                 $expectedMapping   = new Mapping();
                 $expectedMapping[] = new Item("Numbers", [10,20]);
                 self::assertSame($expectedMapping[0]->value, $mapping[0]->value);
-                return new Response();
+                $key = new RecordKey(1);
+                return (new Response())->setRecordKey($key);
             });
 
         $operationCfg =  [
             "recordLocators" => [
-                "source" => [ ],
-                "target" => [ ]
+                "source" => [ "recordType" => '' ],
+                "target" => [ "recordType" => '' ]
             ],
             "mapping" => [
                 [ "source" => ["id" => "Numbers"],  "target" => ["id" => "Numbers"] ]
@@ -725,4 +754,135 @@ class OperationTest extends TestCase
         $operation->run(null, null);
     }
 
+    /**
+     * @covers \Connector\Integrations\Document\PlainText
+     * @covers \Connector\Integrations\Document\AbstractDocument
+     * @uses \Connector\Graph
+     * @uses \Connector\Execution
+     */
+    public function testDocumentMapping()
+    {
+        $source = $this->getFakeSourceIntegration();
+
+        $target = new Fake\Integration();
+        $target->createTable('data', ["Transcript text"]);
+        $target->discover();
+
+        $source->insertRecord('transcript', ['name'=>'Jane Doe', 'grade' => 'A+']);
+
+        $template = "{% begin transcript %}Student: %%name%% - Grade: %%grade%%{% end transcript %}";
+
+        $operationCfg =  [
+            "recordLocators" => [
+                "source" => [ "recordType" => "transcript" ],
+                "target" => [ "recordType" => "data" ]
+            ],
+            "mapping" => [
+                [ "source" => ["document" => [ "template" => $template, "format" => "plain-text"]],
+                  "target" => ["id" => "Transcript"] ],
+            ]
+        ];
+
+        $operation = new Operation($operationCfg, $source, $target );
+        $result    = $operation->run(null, null);
+
+        $this->assertEquals(1, $result->getLoadedRecordKey()->recordId);
+
+        $loadedRecord = $target->selectRecord('data', $result->getLoadedRecordKey()->recordId);
+        $this->assertSame(["id"         => 1,
+                           "Transcript" => "Student: Jane Doe - Grade: A+"
+                          ], $loadedRecord);
+    }
+
+    /**
+     * @covers \Connector\Integrations\Document\PlainText
+     * @covers \Connector\Integrations\Document\AbstractDocument
+     * @uses \Connector\Graph
+     * @uses \Connector\Execution
+     */
+    public function testUnscopedDocument()
+    {
+        $source = new Fake\Integration();
+        $source->createTable('student', [ "name text", "email string"]);
+        $source->createTable('grade',  [ "student_id integer", "grade text", "course text" ]);
+        $source->discover();
+
+        $target = new Fake\Integration();
+        $target->createTable('data', ["Transcript text"]);
+        $target->discover();
+
+        $source->insertRecord('student', ['name'=>'Jane Doe']);
+        $source->insertRecord('student', ['name'=>'John Smith']);
+        $source->insertRecord('grade', ['student_id'=> 1, 'grade' => 'A+', 'course' => 'English 101']);
+        $source->insertRecord('grade', ['student_id'=> 2, 'grade' => 'B', 'course' => 'Calculus 101']);
+
+        $template = "{% begin student %}Student: %%name%% - {% begin grade %}Grade: %%grade%% {% end grade %} {% end student %}";
+
+        $operationCfg =  [
+            "recordLocators" => [
+                "source" => [ "recordType" => "student" ],
+                "target" => [ "recordType" => "data" ]
+            ],
+            "mapping" => [
+                [ "source" => ["document" => [ "template" => $template, "format" => "plain-text"]],
+                  "target" => ["id" => "Transcript"] ],
+            ]
+        ];
+
+        $operation = new Operation($operationCfg, $source, $target );
+        $result    = $operation->run(null, null);
+
+        $this->assertEquals(1, $result->getLoadedRecordKey()->recordId);
+
+        $loadedRecord = $target->selectRecord('data', $result->getLoadedRecordKey()->recordId);
+        $this->assertSame(["id"         => 1,
+                           "Transcript" => "Student: Jane Doe - Grade: A+  Student: John Smith - Grade: B  "
+                          ], $loadedRecord);
+    }
+
+    /**
+     * @covers \Connector\Integrations\Document\PlainText
+     * @covers \Connector\Integrations\Document\AbstractDocument
+     * @uses \Connector\Graph
+     * @uses \Connector\Execution
+     */
+    public function testScopedDocument()
+    {
+        $source = new Fake\Integration();
+        $source->createTable('student', [ "name text", "email string"]);
+        $source->createTable('grade',   [ "student_id integer", "grade text", "course text" ]);
+        $source->discover();
+
+        $target = new Fake\Integration();
+        $target->createTable('data', ["Transcript text"]);
+        $target->discover();
+
+        $source->insertRecord('student', ['name' => 'Jane Doe']);
+        $source->insertRecord('student', ['name' => 'John Smith']);
+        $source->insertRecord('grade', ['student_id' => 1, 'grade' => 'A+', 'course' => 'English 101']);
+        $source->insertRecord('grade', ['student_id' => 2, 'grade' => 'B',  'course' => 'Calculus 101']);
+
+        $template = "{% begin student %}Student: %%name%% - {% begin grade %}Grade: %%grade%% {% end grade %} {% end student %}";
+
+        $operationCfg =  [
+            "recordLocators" => [
+                "source" => [ "recordType" => "student" ],
+                "target" => [ "recordType" => "data" ]
+            ],
+            "mapping" => [
+                [ "source" => ["document" => [ "template" => $template, "format" => "plain-text"]],
+                  "target" => ["id" => "Transcript"] ],
+            ]
+        ];
+
+        $operation = new Operation($operationCfg, $source, $target );
+        $result    = $operation->run(new RecordKey(2, "student"), null);
+
+        $this->assertEquals(1, $result->getLoadedRecordKey()->recordId);
+
+        $loadedRecord = $target->selectRecord('data', $result->getLoadedRecordKey()->recordId);
+        $this->assertSame(["id"         => 1,
+                           "Transcript" => "Student: John Smith - Grade: B  "
+                          ], $loadedRecord);
+    }
 }

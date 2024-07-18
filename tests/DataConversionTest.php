@@ -328,7 +328,7 @@ final class DataConversionTest extends TestCase
         $this->assertSame($expectedValue, $typedValue->convert($targetType)->value);
     }
 
-    public function dataTypes(): array
+    public static function dataTypes(): array
     {
         return [
             "Integer to String Array Conversion" => [
